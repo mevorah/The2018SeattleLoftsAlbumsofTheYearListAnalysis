@@ -22,8 +22,8 @@ def getAuthHeader():
 def checkResponseStatus(response):
 	# TODO make request logic common and use proper exception handling:
 	# https://stackoverflow.com/questions/16511337/correct-way-to-try-except-using-python-requests-module
-	if "200" not in response:
-		print "Request failed with:" + response
+	if "200" not in str(response.status_code):
+		print "Request failed with:" + response.text
 		print "Exiting."
 		exit();
 
@@ -57,11 +57,12 @@ def mapLabel(label):
 		return 1
 	elif label == "Nonesuch":
 		return 2
+	elif label == "Interscope":
+		return 3
 	else:
 		return label
 
 def getAlbumInfo(albumInfo):
-	print "Album Found: " + albumInfo['name'] + " - " + albumInfo['artists'][0]['name']
 	return {'label': mapLabel(albumInfo['label']), 'popularity': albumInfo['popularity'], 'releaseDate': getReleaseYear(albumInfo['release_date'])}
 
 def getAlbumTrackIds(albumInfo):
@@ -152,19 +153,28 @@ def printMatrix(features):
 		matrix += str(features[key]) + " "
 	print matrix
 
+def printPretty(features):
+	keys = features.keys()
+	keys.sort()
+	for key in keys:
+		print key + ": " + str(features[key]) 
+
 albumid = getAlbumId(artistName, albumName)
 getAlbumResponse = getAlbumRequest(albumid)
 albuminfo = getAlbumInfo(getAlbumResponse)
+
+if not outputMatrix:
+	print "Album Found: " + getAlbumResponse['name'] + " - " + getAlbumResponse['artists'][0]['name']
+
 trackids = getAlbumTrackIds(getAlbumResponse)
 tracks = getTrackFeatures(trackids)
 squashedFeatures = getSquashedTrackFeatures(tracks)
 mergedFeatures = merge_two_dicts(albuminfo, squashedFeatures)
 
-
 if outputMatrix:
 	printMatrix(mergedFeatures)
 else:
-	print mergedFeatures
+	printPretty(mergedFeatures)
 
 
 
