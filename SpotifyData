@@ -1,0 +1,161 @@
+#!/usr/bin/env python
+import requests
+import simplejson as json
+import argparse
+from pathlib import Path
+
+parser = argparse.ArgumentParser(description='Prepares data for machine learning.')
+parser.add_argument('-m', action='store_true', help='Output value matrix in format:\n')
+parser.add_argument('--api-key', help='Spotify API key:\https://developer.spotify.com/console/get-album-tracks/')
+parser.add_argument('--artist', help='Artist name')
+parser.add_argument('--album', help='Album name')
+args = parser.parse_args()
+
+apikey = args.api_key
+artistName = args.artist
+albumName = args.album
+outputMatrix = args.m
+
+def getAuthHeader():
+	return {'Authorization': "Bearer " + apikey}
+
+def getAlbumId(artist, album):
+	url = 'https://api.spotify.com/v1/search'
+	query = "album:" + album + " artist:" + artist
+	payload = {'q': query, 'type': 'album', 'limit': 1}
+	auth = getAuthHeader()
+	response = requests.get(url, params=payload, headers=auth)
+	responseJson = json.loads(response.text)
+	albumid = responseJson['albums']['items'][0]['id']
+	return albumid
+
+def getReleaseYear(releaseDate):
+	# returns first 4 characters of 
+	# spotify release date yyyy-mm-dd
+	return releaseDate[:4]
+
+def getAlbumRequest(albumid):
+	url = "https://api.spotify.com/v1/albums/" + albumid
+	auth = getAuthHeader()
+	response = requests.get(url, headers=auth)
+	responseJson = json.loads(response.text)
+	return responseJson
+
+def mapLabel(label):
+	if label == "Capitol Records":
+		return 0
+	elif label == "Warp Records":
+		return 1
+	elif label == "Nonesuch":
+		return 2
+	else:
+		return label
+
+def getAlbumInfo(albumInfo):
+	print "Album Found: " + albumInfo['name'] + " - " + albumInfo['artists'][0]['name']
+	return {'label': mapLabel(albumInfo['label']), 'popularity': albumInfo['popularity'], 'releaseDate': getReleaseYear(albumInfo['release_date'])}
+
+def getAlbumTrackIds(albumInfo):
+	trackIds = []
+	for track in albumInfo['tracks']['items']:
+		trackIds.append(track['id'])
+	return trackIds
+
+def getTrackFeatures(trackIds):
+	url = "https://api.spotify.com/v1/audio-features"
+	auth = getAuthHeader()
+	ids = ",".join(trackIds)
+	payload = {'ids': ids}
+	response = requests.get(url, params=payload, headers=auth)
+	responseJson = json.loads(response.text)
+	trackFeatures = [];
+	for track in responseJson['audio_features']:
+		features = {'energy': track['energy'], 'liveness': track['liveness'], 'tempo': track['tempo'], 'speechiness': track['speechiness'], 'acousticness': track['acousticness'], 'instrumentalness': track['instrumentalness'], 'time_signature': track['time_signature'], 'danceability': track['danceability'], 'key': track['key'], 'duration_ms': track['duration_ms'], 'loudness': track['loudness'], 'valence': track['valence'], 'mode': track['mode']}
+		trackFeatures.append(features)
+	return trackFeatures
+
+def getSquashedTrackFeatures(tracks):
+	numTracks = len(tracks)
+	acousticness = 0
+	danceability = 0
+	duration = 0
+	energy = 0
+	instrumentalness = 0
+	key = []
+	liveness = 0
+	loudness = 0
+	mode = []
+	speechiness = 0
+	tempo = 0
+	time_signature = []
+	valence = 0
+	for track in tracks:
+		acousticness     += track['acousticness']
+		danceability 	 += track['danceability']
+		duration     	 += track['duration_ms']
+		energy       	 += track['energy']
+		instrumentalness += track['instrumentalness']
+		key.append(track['key'])
+		liveness         += track['liveness']
+		loudness         += track['loudness']
+		mode.append(track['mode'])
+		speechiness      += track['speechiness']
+		tempo            += track['tempo']
+		time_signature.append(track['time_signature'])
+		valence          += track['valence'] 
+	avgAcousticness     = acousticness / numTracks
+	avgDanceability     = danceability / numTracks
+	avgDuration         = duration / numTracks
+	avgEnergy           = energy / numTracks
+	avgInstrumentalness = instrumentalness / numTracks
+	mostFreqKey         = max(set(key), key=key.count)
+	avgLiveness         = liveness / numTracks
+	avgLoudness			= loudness / numTracks
+	mostFreqMode        = max(set(mode), key=mode.count)
+	avgSpeechiness      = speechiness / numTracks
+	avgTempo            = tempo / numTracks
+	mostFreqTimeSig     = max(set(time_signature), key=time_signature.count)
+	avgValence          = valence / numTracks
+	return {'acousticness': avgAcousticness, 
+			'danceability': avgDanceability,
+			'duration': avgDuration,
+			'energy': avgEnergy,
+			'instrumentalness': avgInstrumentalness,
+			'key': mostFreqKey,
+			'liveness': avgLiveness,
+			'loudness': avgLoudness,
+			'mode': mostFreqMode,
+			'speechiness': avgSpeechiness,
+			'tempo': avgTempo,
+			'time_signature': mostFreqTimeSig,
+			'valence': avgValence}	 
+
+def merge_two_dicts(x, y):
+    z = x.copy()   # start with x's keys and values
+    z.update(y)    # modifies z with y's keys and values & returns None
+    return z 
+
+def printMatrix(features):
+	keys = features.keys()
+	keys.sort()
+	matrix = ""
+	for key in keys:
+		matrix += str(features[key]) + " "
+	print matrix
+
+albumid = getAlbumId(artistName, albumName)
+getAlbumResponse = getAlbumRequest(albumid)
+albuminfo = getAlbumInfo(getAlbumResponse)
+trackids = getAlbumTrackIds(getAlbumResponse)
+tracks = getTrackFeatures(trackids)
+squashedFeatures = getSquashedTrackFeatures(tracks)
+mergedFeatures = merge_two_dicts(albuminfo, squashedFeatures)
+
+
+if outputMatrix:
+	printMatrix(mergedFeatures)
+else:
+	print mergedFeatures
+
+
+
