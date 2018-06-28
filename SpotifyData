@@ -19,12 +19,21 @@ outputMatrix = args.m
 def getAuthHeader():
 	return {'Authorization': "Bearer " + apikey}
 
+def checkResponseStatus(response):
+	# TODO make request logic common and use proper exception handling:
+	# https://stackoverflow.com/questions/16511337/correct-way-to-try-except-using-python-requests-module
+	if "200" not in response:
+		print "Request failed with:" + response
+		print "Exiting."
+		exit();
+
 def getAlbumId(artist, album):
 	url = 'https://api.spotify.com/v1/search'
 	query = "album:" + album + " artist:" + artist
 	payload = {'q': query, 'type': 'album', 'limit': 1}
 	auth = getAuthHeader()
 	response = requests.get(url, params=payload, headers=auth)
+	checkResponseStatus(response)
 	responseJson = json.loads(response.text)
 	albumid = responseJson['albums']['items'][0]['id']
 	return albumid
