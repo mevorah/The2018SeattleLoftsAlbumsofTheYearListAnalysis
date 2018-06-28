@@ -4,8 +4,8 @@ import simplejson as json
 import argparse
 from pathlib import Path
 
-parser = argparse.ArgumentParser(description='Prepares data for machine learning.')
-parser.add_argument('-m', action='store_true', help='Output value matrix in format:\n')
+parser = argparse.ArgumentParser(description='Fetches an album from spotify and transforms its data into a 1-dimension matrix.')
+parser.add_argument('-m', action='store_true', help='Output value matrix in format:[avg acousticness] [avg danceability] [avg duration] [avg energy] [avg instrumentalness] [most frequest key] [record label (mapping in code)] [avg liveness] [avg loudness] [most frequent mode] [popularity] [release year] [avg speechiness] [avg tempo] [most frequent time_signature] [avg valence]')
 parser.add_argument('--api-key', help='Spotify API key:\https://developer.spotify.com/console/get-album-tracks/')
 parser.add_argument('--artist', help='Artist name')
 parser.add_argument('--album', help='Album name')
