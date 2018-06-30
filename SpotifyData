@@ -2,19 +2,38 @@
 import requests
 import simplejson as json
 import argparse
+import csv
 from pathlib import Path
+
+requests.adapters.DEFAULT_RETRIES = 5
 
 parser = argparse.ArgumentParser(description='Fetches an album from spotify and transforms its data into a 1-dimension matrix.')
 parser.add_argument('-m', action='store_true', help='Output value matrix in format:[avg acousticness] [avg danceability] [avg duration] [avg energy] [avg instrumentalness] [most frequest key] [record label (mapping in code)] [avg liveness] [avg loudness] [most frequent mode] [popularity] [release year] [avg speechiness] [avg tempo] [most frequent time_signature] [avg valence]')
+parser.add_argument('-m1', help="Avg change between averages")
+parser.add_argument('-m2', help="2D matrix where each value is values of a best fit equation")
 parser.add_argument('--api-key', help='Spotify API key:\https://developer.spotify.com/console/get-album-tracks/')
 parser.add_argument('--artist', help='Artist name')
 parser.add_argument('--album', help='Album name')
-args = parser.parse_args()
+parser.add_argument('--input', help='Input file name in format [album] [artist]')
+parser.add_argument('--output', help='Output filename')
 
+args = parser.parse_args()
 apikey = args.api_key
 artistName = args.artist
 albumName = args.album
 outputMatrix = args.m
+filename = args.input
+outfilename = args.output
+
+numProcessed = 0
+total = 17411
+
+def apiLink():
+	print "https://accounts.spotify.com/authorize?client_id=500403bfc1ab4026a50f88bb0366066e&redirect_uri=https://seattlelofts.design/callback&scope=user-read-private%20user-read-email&response_type=token&state=123"
+
+if apikey == None:
+	apiLink();
+	exit();
 
 def getAuthHeader():
 	return {'Authorization': "Bearer " + apikey}
@@ -25,6 +44,7 @@ def checkResponseStatus(response):
 	if "200" not in str(response.status_code):
 		print "Request failed with:" + response.text
 		print "Exiting."
+		apiLink();
 		exit();
 
 def getAlbumId(artist, album):
@@ -33,10 +53,17 @@ def getAlbumId(artist, album):
 	payload = {'q': query, 'type': 'album', 'limit': 1}
 	auth = getAuthHeader()
 	response = requests.get(url, params=payload, headers=auth)
+	if "502" in str(response.status_code):
+		print "Retrying request"
+		response = requests.get(url, params=payload, headers=auth)
+
 	checkResponseStatus(response)
 	responseJson = json.loads(response.text)
-	albumid = responseJson['albums']['items'][0]['id']
-	return albumid
+	if not responseJson['albums']['items']:
+		print "[NOT FOUND][album:" + album + " artist:" + artist + "]"
+		return ""
+	else:
+		return responseJson['albums']['items'][0]['id']
 
 def getReleaseYear(releaseDate):
 	# returns first 4 characters of 
@@ -59,11 +86,31 @@ def mapLabel(label):
 		return 2
 	elif label == "Interscope":
 		return 3
+	elif label == "Bedroom Community":
+		return 4
+	elif label == "Teklife":
+		return 5
+	elif label == "Static Shock":
+		return 6
+	elif label == "Stroboscopic Artefacts":
+		return 7
+	elif label == "Krallice":
+		return 8
+	elif label == "RCA Records Label":
+		return 9
+	elif label == "Circa":
+		return 10
+	elif label == "Age 101":
+		return 11
 	else:
 		return label
 
 def getAlbumInfo(albumInfo):
-	return {'label': mapLabel(albumInfo['label']), 'popularity': albumInfo['popularity'], 'releaseDate': getReleaseYear(albumInfo['release_date'])}
+	return {
+		'label': mapLabel(albumInfo['label']), 
+		'popularity': albumInfo['popularity'], 
+		'releaseDate': getReleaseYear(albumInfo['release_date'])
+	}
 
 def getAlbumTrackIds(albumInfo):
 	trackIds = []
@@ -80,6 +127,9 @@ def getTrackFeatures(trackIds):
 	responseJson = json.loads(response.text)
 	trackFeatures = [];
 	for track in responseJson['audio_features']:
+		if not track:
+			print "[NOT FOUND][Album Missing Tracks]"
+			return
 		features = {'energy': track['energy'], 'liveness': track['liveness'], 'tempo': track['tempo'], 'speechiness': track['speechiness'], 'acousticness': track['acousticness'], 'instrumentalness': track['instrumentalness'], 'time_signature': track['time_signature'], 'danceability': track['danceability'], 'key': track['key'], 'duration_ms': track['duration_ms'], 'loudness': track['loudness'], 'valence': track['valence'], 'mode': track['mode']}
 		trackFeatures.append(features)
 	return trackFeatures
@@ -145,13 +195,11 @@ def merge_two_dicts(x, y):
     z.update(y)    # modifies z with y's keys and values & returns None
     return z 
 
-def printMatrix(features):
-	keys = features.keys()
-	keys.sort()
-	matrix = ""
-	for key in keys:
-		matrix += str(features[key]) + " "
-	print matrix
+def printMatrix(artist,album,score,features):
+	file = open(outfilename, 'a+')
+	matrix = "%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s\n" % (artist, album, score, features['acousticness'], features['danceability'], features['duration'], features['energy'], features['instrumentalness'], features['key'], features['label'], features['liveness'], features['loudness'], features['mode'], features['popularity'], features['releaseDate'], features['speechiness'], features['tempo'], features['time_signature'], features['valence'])	
+	file.write(matrix.encode('utf-8'))
+	file.close()
 
 def printPretty(features):
 	keys = features.keys()
@@ -159,22 +207,36 @@ def printPretty(features):
 	for key in keys:
 		print key + ": " + str(features[key]) 
 
-albumid = getAlbumId(artistName, albumName)
-getAlbumResponse = getAlbumRequest(albumid)
-albuminfo = getAlbumInfo(getAlbumResponse)
+def getMatrix(artistName, albumName, score):
+	albumid = getAlbumId(artistName, albumName)
+	if not albumid:
+		return
+	getAlbumResponse = getAlbumRequest(albumid)
+	albuminfo = getAlbumInfo(getAlbumResponse)
 
-if not outputMatrix:
-	print "Album Found: " + getAlbumResponse['name'] + " - " + getAlbumResponse['artists'][0]['name']
+	if not outputMatrix:
+		print "Album Found: " + getAlbumResponse['name'] + " - " + getAlbumResponse['artists'][0]['name']
 
-trackids = getAlbumTrackIds(getAlbumResponse)
-tracks = getTrackFeatures(trackids)
-squashedFeatures = getSquashedTrackFeatures(tracks)
-mergedFeatures = merge_two_dicts(albuminfo, squashedFeatures)
+	trackids = getAlbumTrackIds(getAlbumResponse)
+	tracks = getTrackFeatures(trackids)
+	if not tracks:
+		return
+	squashedFeatures = getSquashedTrackFeatures(tracks)
+	mergedFeatures = merge_two_dicts(albuminfo, squashedFeatures)
+	printMatrix(artistName, albumName, score, mergedFeatures)
 
-if outputMatrix:
-	printMatrix(mergedFeatures)
+labels = "artist,album,score,acousticness,danceability,duration,energy,instrumentalness,key,label,liveness,loudness,mode,popularity,release year,speechiness,tempo,time_signature,valence"
+if filename != None:
+	mycsv = csv.reader(open(filename))
+	for row in mycsv:
+		getMatrix(row[1], row[0], row[2])
+		numProcessed += 1
+		print "["+str(numProcessed)+"/"+str(total)+"]"
 else:
-	printPretty(mergedFeatures)
+	getMatrix(artistName, albumName)
+
+
+
 
 
 

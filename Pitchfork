@@ -1,0 +1,53 @@
+#!/usr/bin/env python
+import time
+from urllib2 import urlopen
+from bs4 import BeautifulSoup
+
+
+outFile = "ratings.csv"
+domain = "https://pitchfork.com"
+
+def getPageUrls(pageNum):
+	url = domain + "/reviews/albums/?page=" + str(pageNum)
+	website = urlopen(url)
+	markup = website.read().decode('utf-8')
+	soup = BeautifulSoup(markup, "html.parser")
+	linkElements = soup.find_all("a", "review__link", "href")
+	links = []
+	for element in linkElements:
+		links.append(domain + element['href'])
+	return links
+
+def getArtistAlbumRating(url):
+	website = urlopen(url)
+	markup = website.read().decode('utf-8')
+	soup = BeautifulSoup(markup, "html.parser")
+	artist = soup.find_all("ul", "artist-links")[0].text.strip()
+	album = soup.find_all("h1")[0].text.strip()
+	rating = soup.find_all("span", "score")[0].text.strip()
+	pubDate = soup.find_all("time", "pub-date")[0].text
+	return {"pub-date": pubDate, "artist": artist, "album": album, "rating": rating}
+
+def printPrettyWithYear(artistAlbumRating):
+	print "Published:" + artistAlbumRating['pub-date'] + " \"" + artistAlbumRating['album'] + "\" \"" + artistAlbumRating['artist'] + "\" \"" + artistAlbumRating['rating'] + "\""
+
+avgPageTimeSec = 0;
+totalTimeSec = 0;
+for i in range(1, 1691):
+	start_time = time.time()
+	file = open(outFile, 'a+')
+	print "Searching page:" + str(i) + "/" + str(1690)
+	pageUrls = getPageUrls(i)
+	for pageUrl in pageUrls:
+		collection = getArtistAlbumRating(pageUrl)
+		printPrettyWithYear(collection)
+		file.write(("%s,%s,%s\n" % (collection['album'],collection['artist'],collection['rating'])).encode('utf-8'))
+	file.close()
+	totalTimeSec += time.time() - start_time
+	avgPageTime = totalTimeSec / i
+	remaining = 1691 - i
+	remainingSec = remaining * avgPageTime
+	print "Avg Page Process Time (s):" + str(avgPageTime) + " - " + str(remainingSec / 60) + " minutes remaining"
+
+
+#print getArtistAlbumRating("https://pitchfork.com/reviews/albums/john-coltrane-both-directions-at-once-the-lost-album/")
