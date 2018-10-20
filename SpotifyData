@@ -77,37 +77,9 @@ def getAlbumRequest(albumid):
 	responseJson = json.loads(response.text)
 	return responseJson
 
-def mapLabel(label):
-	if label == "Capitol Records":
-		return 0
-	elif label == "Warp Records":
-		return 1
-	elif label == "Nonesuch":
-		return 2
-	elif label == "Interscope":
-		return 3
-	elif label == "Bedroom Community":
-		return 4
-	elif label == "Teklife":
-		return 5
-	elif label == "Static Shock":
-		return 6
-	elif label == "Stroboscopic Artefacts":
-		return 7
-	elif label == "Krallice":
-		return 8
-	elif label == "RCA Records Label":
-		return 9
-	elif label == "Circa":
-		return 10
-	elif label == "Age 101":
-		return 11
-	else:
-		return label
-
 def getAlbumInfo(albumInfo):
 	return {
-		'label': mapLabel(albumInfo['label']), 
+		'label': albumInfo['label'], 
 		'popularity': albumInfo['popularity'], 
 		'releaseDate': getReleaseYear(albumInfo['release_date'])
 	}
@@ -134,71 +106,16 @@ def getTrackFeatures(trackIds):
 		trackFeatures.append(features)
 	return trackFeatures
 
-def getSquashedTrackFeatures(tracks):
-	numTracks = len(tracks)
-	acousticness = 0
-	danceability = 0
-	duration = 0
-	energy = 0
-	instrumentalness = 0
-	key = []
-	liveness = 0
-	loudness = 0
-	mode = []
-	speechiness = 0
-	tempo = 0
-	time_signature = []
-	valence = 0
+def merge_two_dicts(albumInfo, tracks):
 	for track in tracks:
-		acousticness     += track['acousticness']
-		danceability 	 += track['danceability']
-		duration     	 += track['duration_ms']
-		energy       	 += track['energy']
-		instrumentalness += track['instrumentalness']
-		key.append(track['key'])
-		liveness         += track['liveness']
-		loudness         += track['loudness']
-		mode.append(track['mode'])
-		speechiness      += track['speechiness']
-		tempo            += track['tempo']
-		time_signature.append(track['time_signature'])
-		valence          += track['valence'] 
-	avgAcousticness     = acousticness / numTracks
-	avgDanceability     = danceability / numTracks
-	avgDuration         = duration / numTracks
-	avgEnergy           = energy / numTracks
-	avgInstrumentalness = instrumentalness / numTracks
-	mostFreqKey         = max(set(key), key=key.count)
-	avgLiveness         = liveness / numTracks
-	avgLoudness			= loudness / numTracks
-	mostFreqMode        = max(set(mode), key=mode.count)
-	avgSpeechiness      = speechiness / numTracks
-	avgTempo            = tempo / numTracks
-	mostFreqTimeSig     = max(set(time_signature), key=time_signature.count)
-	avgValence          = valence / numTracks
-	return {'acousticness': avgAcousticness, 
-			'danceability': avgDanceability,
-			'duration': avgDuration,
-			'energy': avgEnergy,
-			'instrumentalness': avgInstrumentalness,
-			'key': mostFreqKey,
-			'liveness': avgLiveness,
-			'loudness': avgLoudness,
-			'mode': mostFreqMode,
-			'speechiness': avgSpeechiness,
-			'tempo': avgTempo,
-			'time_signature': mostFreqTimeSig,
-			'valence': avgValence}	 
+		track.update(albumInfo)
+	return tracks
 
-def merge_two_dicts(x, y):
-    z = x.copy()   # start with x's keys and values
-    z.update(y)    # modifies z with y's keys and values & returns None
-    return z 
-
-def printMatrix(artist,album,score,features):
+def printMatrix(artist,album,score,tracks):
 	file = open(outfilename, 'a+')
-	matrix = "%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s\n" % (artist, album, score, features['acousticness'], features['danceability'], features['duration'], features['energy'], features['instrumentalness'], features['key'], features['label'], features['liveness'], features['loudness'], features['mode'], features['popularity'], features['releaseDate'], features['speechiness'], features['tempo'], features['time_signature'], features['valence'])	
-	file.write(matrix.encode('utf-8'))
+	for track in tracks:
+		matrix = "%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s\n" % (artist, album, score, track['acousticness'], track['danceability'], track['duration_ms'], track['energy'], track['instrumentalness'], track['key'], track['label'], track['liveness'], track['loudness'], track['mode'], track['popularity'], track['releaseDate'], track['speechiness'], track['tempo'], track['time_signature'], track['valence'])	
+		file.write(matrix.encode('utf-8'))
 	file.close()
 
 def printPretty(features):
@@ -221,9 +138,8 @@ def getMatrix(artistName, albumName, score):
 	tracks = getTrackFeatures(trackids)
 	if not tracks:
 		return
-	squashedFeatures = getSquashedTrackFeatures(tracks)
-	mergedFeatures = merge_two_dicts(albuminfo, squashedFeatures)
-	printMatrix(artistName, albumName, score, mergedFeatures)
+	mergedFeatures = merge_two_dicts(albuminfo, tracks)
+	printMatrix(artistName, albumName, score, tracks)
 
 labels = "artist,album,score,acousticness,danceability,duration,energy,instrumentalness,key,label,liveness,loudness,mode,popularity,release year,speechiness,tempo,time_signature,valence"
 if filename != None:
