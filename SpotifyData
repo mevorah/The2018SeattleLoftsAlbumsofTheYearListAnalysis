@@ -127,6 +127,7 @@ def printPretty(features):
 def getMatrix(artistName, albumName, score):
 	albumid = getAlbumId(artistName, albumName)
 	if not albumid:
+		print("Skipped:" + artistName + "," + albumName)
 		return
 	getAlbumResponse = getAlbumRequest(albumid)
 	albuminfo = getAlbumInfo(getAlbumResponse)
